@@ -1,0 +1,2387 @@
+openapi: 3.0.0
+info:
+  title: Financial Management API
+  version: "2.0.0"
+  description: Financial Management API
+servers:
+  - url: http://localhost:3000
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          description: ID
+          example: "507f1f77bcf86cd799439011"
+        name:
+          type: string
+          example: "Name"
+        email:
+          type: string
+          format: email
+          example: "Email"
+        username:
+          type: string
+          nullable: true
+        phone_number:
+          type: string
+          nullable: true
+        image:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+          example: true
+
+    Currency:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+        code:
+          type: string
+          example: "USD"
+        description:
+          type: string
+          example: "US Dollar"
+        exchangeRate:
+          type: number
+          example: 1.0
+
+    BankAccount:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+        bankName:
+          type: string
+          example: "Chase Bank"
+        type:
+          type: string
+          example: "checking"
+        branchName:
+          type: string
+          example: "Downtown Branch"
+        accountNumber:
+          type: string
+          example: "1234567890"
+        balance:
+          type: number
+          example: 1500.50
+        currencyId:
+          $ref: "#/components/schemas/Currency"
+        clientId:
+          type: string
+          description: MongoDB ObjectId reference to User
+        isActive:
+          type: boolean
+          example: true
+
+    Transaction:
+      type: object
+      properties:
+        id:
+          type: string
+          description: MongoDB ObjectId
+        bankId:
+          type: string
+          description: MongoDB ObjectId reference to BankAccount
+        item:
+          type: string
+          example: "Groceries"
+        shopName:
+          type: string
+          example: "Walmart"
+        date:
+          type: string
+          format: date-time
+        transactionType:
+          type: string
+          enum: [income, expense]
+        amount:
+          type: number
+          example: 45.99
+        currency:
+          type: object
+          properties:
+            id:
+              type: string
+              description: MongoDB ObjectId
+            code:
+              type: string
+            description:
+              type: string
+            exchangeRate:
+              type: number
+        paymentMethod:
+          type: string
+          example: "credit_card"
+        receipt:
+          type: string
+          example: "RCPT-ABC123"
+        isActive:
+          type: boolean
+        status:
+          type: string
+          enum: [paid, pending]
+          description: Added status field for transaction state
+
+    Bill:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+        name:
+          type: string
+          example: "Electric Bill"
+        description:
+          type: string
+          example: "Monthly electricity payment"
+        amount:
+          type: number
+          example: 89.50
+        dueDate:
+          type: string
+          format: date
+        lastCharge:
+          type: string
+          format: date
+        isPaid:
+          type: boolean
+        currencyId:
+          type: string
+          description: MongoDB ObjectId reference
+        userId:
+          type: string
+          description: MongoDB ObjectId reference
+        isActive:
+          type: boolean
+        frequency:
+          type: string
+          enum: [monthly, yearly]
+          description: Bill recurrence frequency
+
+    Expense:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+        category:
+          type: string
+          example: "Food"
+        amount:
+          type: number
+          example: 25.99
+        date:
+          type: string
+          format: date-time
+        description:
+          type: string
+          example: "Lunch at restaurant"
+        userId:
+          type: string
+          description: MongoDB ObjectId reference
+        currencyId:
+          type: string
+          description: MongoDB ObjectId reference
+        status:
+          type: string
+          enum: [paid, pending]
+          description: Payment status of the expense
+        transactionId:
+          type: string
+          description: MongoDB ObjectId reference to linked transaction
+          nullable: true
+
+    Goal:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: MongoDB ObjectId
+        title:
+          type: string
+          example: "Monthly Budget Goal"
+        targetAmount:
+          type: number
+          example: 2000.00
+        userId:
+          type: string
+          description: MongoDB ObjectId reference
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Resource not found"
+
+paths:
+  # ===== Authentication =====
+  /register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name:
+                  type: string
+                  example: "John Doe"
+                email:
+                  type: string
+                  format: email
+                  example: "john@example.com"
+                password:
+                  type: string
+                  example: "securepassword123"
+      responses:
+        "201":
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: MongoDB ObjectId
+                  name:
+                    type: string
+                  email:
+                    type: string
+        "400":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to register user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /login:
+    post:
+      tags:
+        - Authentication
+      summary: Login user and get JWT token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                    description: MongoDB ObjectId
+                  name:
+                    type: string
+                  email:
+                    type: string
+                  phone_number:
+                    type: string
+                    nullable: true
+                  image:
+                    type: string
+                    nullable: true
+                  token:
+                    type: string
+                    description: JWT token
+        "401":
+          description: Invalid password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /forgot-password:
+    post:
+      tags:
+        - Authentication
+      summary: Request password reset link
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Password reset link sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  token:
+                    type: string
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to send email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /reset-password:
+    put:
+      tags:
+        - Authentication
+      summary: Reset password using token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, newPassword]
+              properties:
+                token:
+                  type: string
+                newPassword:
+                  type: string
+      responses:
+        "200":
+          description: Password updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ===== User Management =====
+  /user:
+    get:
+      tags:
+        - Users
+      summary: Get current user details
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User details retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      tags:
+        - Users
+      summary: Update user profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                username:
+                  type: string
+                phone_number:
+                  type: string
+                image:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  user:
+                    $ref: "#/components/schemas/User"
+        "400":
+          description: Invalid request or password same as old
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /user/deactivate:
+    patch:
+      summary: Deactivate the authenticated user
+      tags:
+        - Users
+      responses:
+        200:
+          description: User deactivated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "User deactivated successfully"
+        404:
+          description: User not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "User not found"
+        500:
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to deactivate user"
+
+  # ===== Currency Management =====
+  /currency:
+    post:
+      tags:
+        - Currency
+      summary: Create a new currency
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, description, exchangeRate]
+              properties:
+                code:
+                  type: string
+                  example: "EUR"
+                description:
+                  type: string
+                  example: "Euro"
+                exchangeRate:
+                  type: number
+                  example: 0.85
+      responses:
+        "201":
+          description: Currency created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Currency"
+        "400":
+          description: Currency already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to register currency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags:
+        - Currency
+      summary: Get all currencies
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of currencies
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Currency"
+        "500":
+          description: Failed to fetch currencies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /currency/{id}:
+    get:
+      tags:
+        - Currency
+      summary: Get currency by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        "200":
+          description: Currency retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Currency"
+        "404":
+          description: Currency not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to fetch currency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      tags:
+        - Currency
+      summary: Update currency by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code:
+                  type: string
+                description:
+                  type: string
+                exchangeRate:
+                  type: number
+      responses:
+        "200":
+          description: Currency updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Currency"
+        "404":
+          description: Currency not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to update currency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - Currency
+      summary: Delete currency by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      responses:
+        "200":
+          description: Currency deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Currency not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to delete currency
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ===== Bank Accounts =====
+  /bankaccount:
+    post:
+      tags:
+        - BankAccount
+      summary: Create a new bank account
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bankName, type, accountNumber, balance, currencyId]
+              properties:
+                bankName:
+                  type: string
+                  example: "Chase Bank"
+                type:
+                  type: string
+                  example: "checking"
+                branchName:
+                  type: string
+                  example: "Downtown Branch"
+                accountNumber:
+                  type: string
+                  example: "1234567890"
+                balance:
+                  type: number
+                  example: 1500.50
+                currencyId:
+                  type: string
+                  description: MongoDB ObjectId of currency
+                  example: "507f1f77bcf86cd799439011"
+                isActive:
+                  type: boolean
+                  default: true
+      responses:
+        "201":
+          description: Bank account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankAccount"
+        "400":
+          description: Bank account already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to register card
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags:
+        - BankAccount
+      summary: Get all bank accounts for current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of bank accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BankAccount"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /bankaccount/{id}:
+    get:
+      tags:
+        - BankAccount
+      summary: Get bank account by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      responses:
+        "200":
+          description: Bank account retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankAccount"
+        "404":
+          description: Bank account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    put:
+      tags:
+        - BankAccount
+      summary: Update bank account by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                bankName:
+                  type: string
+                type:
+                  type: string
+                branchName:
+                  type: string
+                accountNumber:
+                  type: string
+                balance:
+                  type: number
+                currencyId:
+                  type: string
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Bank account updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BankAccount"
+        "400":
+          description: Update failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Bank account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - BankAccount
+      summary: Delete bank account by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      responses:
+        "200":
+          description: Bank account deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Bank account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      # ===== Bank Transfer =====
+  /transfer:
+    post:
+      tags:
+        - BankTransfer
+      summary: Transfer funds between two bank accounts
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fromAccountNumber, toAccountNumber, amount]
+              properties:
+                fromAccountNumber:
+                  type: string
+                  example: "1234567890"
+                toAccountNumber:
+                  type: string
+                  example: "0987654321"
+                amount:
+                  type: number
+                  example: 200.00
+
+      responses:
+        "200":
+          description: Transfer successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Transfer successful"
+                  fromCard:
+                    $ref: "#/components/schemas/BankAccount"
+                  toCard:
+                    $ref: "#/components/schemas/BankAccount"
+        "400":
+          description: Invalid request or insufficient funds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Source or destination bank account not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  # ===== Transactions =====
+  /transactions:
+    post:
+      tags:
+        - Transactions
+      summary: Create a new transaction and automatically create expense if transaction type is expense
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                [
+                  bankId,
+                  item,
+                  shopName,
+                  date,
+                  transactionType,
+                  amount,
+                  currencyId,
+                  paymentMethod,
+                ]
+              properties:
+                bankId:
+                  type: string
+                  description: MongoDB ObjectId of bank account
+                  example: "507f1f77bcf86cd799439011"
+                item:
+                  type: string
+                  example: "Groceries"
+                shopName:
+                  type: string
+                  example: "Walmart"
+                date:
+                  type: string
+                  format: date-time
+                  example: "2023-12-15T10:30:00Z"
+                transactionType:
+                  type: string
+                  enum: [income, expense]
+                  example: "expense"
+                amount:
+                  type: number
+                  example: 45.99
+                currencyId:
+                  type: string
+                  description: MongoDB ObjectId of currency
+                  example: "507f1f77bcf86cd799439012"
+                paymentMethod:
+                  type: string
+                  example: "credit_card"
+                isActive:
+                  type: boolean
+                  default: true
+      responses:
+        "201":
+          description: Transaction created successfully (and expense auto-created if transactionType is expense)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transaction"
+        "400":
+          description: Invalid bankId, currencyId, or date format
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to register transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags:
+        - Transactions
+      summary: Get all transactions for current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of transactions (sorted by newest first)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /transactions/bank/{bankId}:
+    get:
+      tags:
+        - Transactions
+      summary: Get transactions by bank MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: bankId
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId of bank account
+          example: "507f1f77bcf86cd799439011"
+      responses:
+        "200":
+          description: Transactions filtered by bank account
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+        "400":
+          description: Invalid bankId or access denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /transactions/type/{transactionType}:
+    get:
+      tags:
+        - Transactions
+      summary: Get transactions by type
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: transactionType
+          schema:
+            type: string
+            enum: [income, expense]
+          required: true
+          example: "expense"
+      responses:
+        "200":
+          description: Transactions filtered by type
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Transaction"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /transactions/{id}:
+    put:
+      tags:
+        - Transactions
+      summary: Update transaction by MongoDB ObjectId (also syncs linked expense if exists)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId of transaction
+          example: "507f1f77bcf86cd799439011"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                item:
+                  type: string
+                shopName:
+                  type: string
+                date:
+                  type: string
+                  format: date-time
+                transactionType:
+                  type: string
+                  enum: [income, expense]
+                amount:
+                  type: number
+                paymentMethod:
+                  type: string
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Transaction updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  transaction:
+                    $ref: "#/components/schemas/Transaction"
+        "403":
+          description: Access denied - user doesn't own this transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to update transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - Transactions
+      summary: Delete transaction by MongoDB ObjectId (also removes linked expense)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId of transaction
+      responses:
+        "200":
+          description: Transaction and linked expense deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "403":
+          description: Access denied - user doesn't own this transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Transaction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Failed to delete transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /transactions/summary:
+    get:
+      tags:
+        - Transactions
+      summary: Get summary of income and expense for this month and last month
+      description: Returns total income and expense for the current month and the previous month for the authenticated user.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Summary fetched successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  currentMonth:
+                    type: object
+                    properties:
+                      income:
+                        type: number
+                        example: 5000
+                        description: Total income for the current month
+                      expense:
+                        type: number
+                        example: 2300
+                        description: Total expense for the current month
+                  lastMonth:
+                    type: object
+                    properties:
+                      income:
+                        type: number
+                        example: 4500
+                        description: Total income for the last month
+                      expense:
+                        type: number
+                        example: 2000
+                        description: Total expense for the last month
+        "401":
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to fetch summary"
+  /transactions/daily-summary:
+    get:
+      tags:
+        - Transactions
+      summary: Get daily summary of income and expense for the current month
+      description: Returns total income and total expense for each day of the current month for the authenticated user. Each object in the array contains date, income, and expense.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Daily summary fetched successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    date:
+                      type: string
+                      format: date
+                      example: "2025-09-01"
+                      description: Date of the transaction summary (YYYY-MM-DD)
+                    income:
+                      type: number
+                      example: 150
+                      description: Total income for this day
+                    expense:
+                      type: number
+                      example: 80
+                      description: Total expense for this day
+        "401":
+          description: Unauthorized - invalid or missing token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Failed to fetch daily summary"
+
+  # ===== Bills =====
+  /bills:
+    post:
+      tags:
+        - Bills
+      summary: Create a new bill (automatically creates pending transaction and expense)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, amount, dueDate]
+              properties:
+                name:
+                  type: string
+                  example: "Electric Bill"
+                description:
+                  type: string
+                  example: "Monthly electricity payment"
+                amount:
+                  type: number
+                  example: 89.50
+                dueDate:
+                  type: string
+                  format: date
+                  example: "2023-12-31"
+                lastCharge:
+                  type: string
+                  format: date
+                isPaid:
+                  type: boolean
+                  default: false
+                currencyId:
+                  type: string
+                  description: MongoDB ObjectId
+                frequency:
+                  type: string
+                  enum: [monthly, yearly]
+                  description: Bill recurrence frequency
+                isActive:
+                  type: boolean
+                  default: true
+      responses:
+        "201":
+          description: Bill, pending transaction, and pending expense created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bill:
+                    $ref: "#/components/schemas/Bill"
+                  expense:
+                    $ref: "#/components/schemas/Expense"
+                  transaction:
+                    $ref: "#/components/schemas/Transaction"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags:
+        - Bills
+      summary: Get all bills for current user
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of bills (sorted by due date)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Bill"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /bills/{id}:
+    put:
+      tags:
+        - Bills
+      summary: Update bill by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                amount:
+                  type: number
+                dueDate:
+                  type: string
+                  format: date
+                lastCharge:
+                  type: string
+                  format: date
+                isPaid:
+                  type: boolean
+                currencyId:
+                  type: string
+                frequency:
+                  type: string
+                  enum: [monthly, yearly]
+                isActive:
+                  type: boolean
+      responses:
+        "200":
+          description: Bill updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Bill"
+        "404":
+          description: Bill not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - Bills
+      summary: Delete bill by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      responses:
+        "200":
+          description: Bill deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Bill not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /bills/{id}/pay:
+    put:
+      tags:
+        - Bills
+      summary: Pay a bill (updates bill status and creates paid transaction and expense)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId of the bill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bankId, paymentMethod, currencyId]
+              properties:
+                bankId:
+                  type: string
+                  description: MongoDB ObjectId of bank account to pay from
+                paymentMethod:
+                  type: string
+                  example: "online_banking"
+                currencyId:
+                  type: string
+                  description: MongoDB ObjectId of currency
+      responses:
+        "200":
+          description: Bill paid successfully, transaction and expense updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  bill:
+                    $ref: "#/components/schemas/Bill"
+                  expense:
+                    $ref: "#/components/schemas/Expense"
+                  transaction:
+                    $ref: "#/components/schemas/Transaction"
+        "400":
+          description: Invalid currencyId
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Bill not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /bills-due-soon:
+    get:
+      tags:
+        - Bills
+      security:
+        - bearerAuth: [] # Enforcing Bearer Authentication
+      summary: Get bills due soon with debug information
+      description: |
+        This endpoint checks for bills that are due within the next 24 hours and returns them to the frontend.
+        It includes comprehensive debug information to help troubleshoot issues with bill detection.
+
+        **Logic**: Returns bills where `dueDate > now` AND `dueDate <= now + 24 hours`
+
+        **Filters applied**:
+        - Only unpaid bills (`isPaid: false`)
+        - Only bills belonging to the authenticated user
+        - Only bills due within the next 24 hours (not overdue bills)
+      responses:
+        200:
+          description: Successfully retrieved bills due soon (includes case when no bills are found)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - # When bills are found
+                    type: object
+                    properties:
+                      billsDueSoon:
+                        type: array
+                        description: List of bills due within the next 24 hours
+                        items:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                              description: Bill ID
+                              example: "507f1f77bcf86cd799439011"
+                            name:
+                              type: string
+                              description: Name of the bill
+                              example: "Electricity Bill"
+                            dueDate:
+                              type: string
+                              format: date-time
+                              description: Due date of the bill
+                              example: "2024-01-15T10:30:00.000Z"
+                            amount:
+                              type: number
+                              description: Amount of the bill
+                              example: 150.75
+                            currency:
+                              type: string
+                              description: Currency of the bill
+                              example: "USD"
+                            userId:
+                              type: string
+                              description: User ID who owns this bill
+                              example: "507f1f77bcf86cd799439012"
+                            isPaid:
+                              type: boolean
+                              description: Payment status
+                              example: false
+                      debugInfo:
+                        type: object
+                        description: Debug information for troubleshooting
+                        properties:
+                          totalBills:
+                            type: integer
+                            description: Total number of unpaid bills for the user
+                            example: 5
+                          currentTime:
+                            type: string
+                            format: date-time
+                            description: Server's current timestamp
+                            example: "2024-01-14T15:45:30.123Z"
+                          next24Hours:
+                            type: string
+                            format: date-time
+                            description: Timestamp 24 hours from current time
+                            example: "2024-01-15T15:45:30.123Z"
+                  - # When no bills are found
+                    type: object
+                    properties:
+                      message:
+                        type: string
+                        description: Message indicating no bills are due soon
+                        example: "No bills due soon."
+                      debugInfo:
+                        type: object
+                        description: Debug information for troubleshooting
+                        properties:
+                          totalBills:
+                            type: integer
+                            description: Total number of unpaid bills for the user
+                            example: 3
+                          currentTime:
+                            type: string
+                            format: date-time
+                            description: Server's current timestamp
+                            example: "2024-01-14T15:45:30.123Z"
+                          next24Hours:
+                            type: string
+                            format: date-time
+                            description: Timestamp 24 hours from current time
+                            example: "2024-01-15T15:45:30.123Z"
+                          allBills:
+                            type: array
+                            description: All unpaid bills for debugging purposes
+                            items:
+                              type: object
+                              properties:
+                                name:
+                                  type: string
+                                  description: Bill name
+                                  example: "Internet Bill"
+                                dueDate:
+                                  type: string
+                                  description: Original due date from database
+                                  example: "2024-01-20T00:00:00.000Z"
+                                dueDateFormatted:
+                                  type: string
+                                  format: date-time
+                                  description: Formatted due date for comparison
+                                  example: "2024-01-20T00:00:00.000Z"
+              examples:
+                bills_found:
+                  summary: Bills found due soon
+                  value:
+                    billsDueSoon:
+                      - _id: "507f1f77bcf86cd799439011"
+                        name: "Electricity Bill"
+                        dueDate: "2024-01-15T10:30:00.000Z"
+                        amount: 150.75
+                        currency: "USD"
+                        userId: "507f1f77bcf86cd799439012"
+                        isPaid: false
+                      - _id: "507f1f77bcf86cd799439013"
+                        name: "Water Bill"
+                        dueDate: "2024-01-15T14:00:00.000Z"
+                        amount: 85.50
+                        currency: "USD"
+                        userId: "507f1f77bcf86cd799439012"
+                        isPaid: false
+                    debugInfo:
+                      totalBills: 5
+                      currentTime: "2024-01-14T15:45:30.123Z"
+                      next24Hours: "2024-01-15T15:45:30.123Z"
+                no_bills_found:
+                  summary: No bills due soon
+                  value:
+                    message: "No bills due soon."
+                    debugInfo:
+                      totalBills: 3
+                      currentTime: "2024-01-14T15:45:30.123Z"
+                      next24Hours: "2024-01-15T15:45:30.123Z"
+                      allBills:
+                        - name: "Internet Bill"
+                          dueDate: "2024-01-20T00:00:00.000Z"
+                          dueDateFormatted: "2024-01-20T00:00:00.000Z"
+                        - name: "Phone Bill"
+                          dueDate: "2024-01-25T12:00:00.000Z"
+                          dueDateFormatted: "2024-01-25T12:00:00.000Z"
+                        - name: "Rent"
+                          dueDate: "2024-01-10T09:00:00.000Z"
+                          dueDateFormatted: "2024-01-10T09:00:00.000Z"
+        401:
+          description: Unauthorized - Invalid or missing bearer token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+                    example: "Access denied. No token provided."
+        500:
+          description: Internal server error - Failed to retrieve bills due soon
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    description: Error message
+                    example: "Failed to fetch bills due soon"
+
+  # ===== Expenses =====
+  /expenses:
+    post:
+      tags:
+        - Expenses
+      summary: Create a new expense (standalone or linked to transaction)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, amount, date]
+              properties:
+                category:
+                  type: string
+                  example: "Food"
+                subcategory:
+                  type: string
+                  example: "Restaurant"
+                amount:
+                  type: number
+                  example: 25.99
+                date:
+                  type: string
+                  format: date-time
+                  example: "2023-12-15T12:00:00Z"
+                description:
+                  type: string
+                  example: "Lunch at restaurant"
+                currencyId:
+                  type: string
+                  description: MongoDB ObjectId of currency
+
+      responses:
+        "201":
+          description: Expense created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags:
+        - Expenses
+      summary: Get expense analysis with monthly comparison (only expense data)
+      description: |
+        Returns category-based spending analysis for the current and previous month,
+        grouped by category and subcategory. Each category includes totals, subcategories,
+        and percentage change compared to last month.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Monthly expense comparison
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  thisMonthRange:
+                    type: object
+                    properties:
+                      start:
+                        type: string
+                        format: date-time
+                      end:
+                        type: string
+                        format: date-time
+                  lastMonthRange:
+                    type: object
+                    properties:
+                      start:
+                        type: string
+                        format: date-time
+                      end:
+                        type: string
+                        format: date-time
+                  expenses:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        category:
+                          type: string
+                          example: "Food"
+                        thisMonthTotal:
+                          type: number
+                          example: 350
+                        lastMonthTotal:
+                          type: number
+                          example: 300
+                        percentChange:
+                          type: number
+                          example: 16.67
+                        subcategories:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              name:
+                                type: string
+                                example: "Restaurant"
+                              amount:
+                                type: number
+                                example: 120
+                              date:
+                                type: string
+                                format: date-time
+                              description:
+                                type: string
+        "500":
+          description: Failed to fetch expenses
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /expenses/{id}:
+    put:
+      tags:
+        - Expenses
+      summary: Update expense by MongoDB ObjectId (syncs with linked transaction if exists)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category:
+                  type: string
+                subcategory:
+                  type: string
+                amount:
+                  type: number
+                date:
+                  type: string
+                  format: date-time
+                description:
+                  type: string
+                status:
+                  type: string
+                  enum: [paid, pending]
+      responses:
+        "200":
+          description: Expense updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Expense"
+        "404":
+          description: Expense not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      tags:
+        - Expenses
+      summary: Delete all expenses by category for the authenticated user
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: category
+          schema:
+            type: string
+          required: true
+          description: Expense category to delete
+      responses:
+        "200":
+          description: Expenses deleted successfully
+          content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+        "404":
+          description: No expenses found for this category
+          content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+          application/json:
+            schema:
+            $ref: "#/components/schemas/Error"
+
+  # ===== Goals =====
+  /goals:
+    post:
+      tags:
+        - Goals
+      summary: Create a new savings/spending goal
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, targetAmount, presentAmount, month, year]
+              properties:
+                title:
+                  type: string
+                  example: "Monthly Budget Goal"
+                targetAmount:
+                  type: number
+                  example: 2000.00
+                presentAmount:
+                  type: number
+                  example: 500.00
+                category:
+                  type: string
+                  example: "Groceries"
+                month:
+                  type: integer
+                  description: Month number (0 = January, 1 = February, etc.)
+                  example: 0
+                year:
+                  type: integer
+                  description: Year of the goal
+                  example: 2025
+                currencyId:
+                  type: string
+                  description: MongoDB ObjectId for currency
+                  example: "64f1b2c4e8a4e2f1b1234567"
+      responses:
+        "201":
+          description: Goal created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    get:
+      tags:
+        - Goals
+      summary: Get all goals grouped by year and month
+      description: Returns all goals independent of transactions, showing target and present amounts
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of all goals grouped by year and month
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: object
+                  additionalProperties:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                          description: MongoDB ObjectId
+                        title:
+                          type: string
+                        targetAmount:
+                          type: number
+                        presentAmount:
+                          type: number
+                        progress:
+                          type: number
+                          description: Percentage of target achieved
+                        currency:
+                          type: string
+                        category:
+                          type: string
+                        month:
+                          type: integer
+                        year:
+                          type: integer
+        "500":
+          description: Failed to fetch goals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /goals/categories:
+    get:
+      summary: Get all unique goal categories for the authenticated user
+      tags:
+        - Goals
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Successfully retrieved categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  categories:
+                    type: array
+                    items:
+                      type: string
+                    example: ["Groceries", "Clothes", "Bills", "Transport"]
+        "401":
+          description: Unauthorized, missing or invalid token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Internal server error"
+
+  /goals/{year}/{month}/{category}:
+    get:
+      tags:
+        - Goals
+      summary: Get all goals for a specific year, month, and optionally category
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: year
+          schema:
+            type: integer
+          required: true
+          description: Year number (e.g., 2025)
+        - in: path
+          name: month
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 11
+          required: true
+          description: Month number (0 = Jan, 1 = Feb, etc.)
+        - in: path
+          name: category
+          schema:
+            type: string
+          required: false
+          description: (Optional) Filter goals by category
+      responses:
+        "200":
+          description: List of goals for the given year, month, and optional category
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    title:
+                      type: string
+                    targetAmount:
+                      type: number
+                    presentAmount:
+                      type: number
+                    progress:
+                      type: number
+                      description: Percentage progress toward the goal
+                    currency:
+                      type: string
+                    category:
+                      type: string
+                      nullable: true
+        "500":
+          description: Failed to fetch goals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /goals/{id}:
+    put:
+      tags:
+        - Goals
+      summary: Update goal by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                targetAmount:
+                  type: number
+                presentAmount:
+                  type: number
+                category:
+                  type: string
+                month:
+                  type: integer
+                year:
+                  type: integer
+                currencyId:
+                  type: string
+      responses:
+        "200":
+          description: Goal updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Goal"
+        "404":
+          description: Goal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+    delete:
+      tags:
+        - Goals
+      summary: Delete goal by MongoDB ObjectId
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+          required: true
+          description: MongoDB ObjectId
+      responses:
+        "200":
+          description: Goal deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        "404":
+          description: Goal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /insights:
+    get:
+      tags:
+        - Insights
+      summary: Get smart insights on user expenses
+      description: Returns insights like spending trend, top category, and top subcategory for the current month.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of insights
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  insights:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                          description: Type of insight (spending_trend, top_category, top_subcategory)
+                        message:
+                          type: string
+                          description: Human-readable message for the insight
+                        severity:
+                          type: string
+                          description: Severity of the insight (info, warning, success)
+                      required:
+                        - type
+                        - message
+                        - severity
+                example:
+                  insights:
+                    - type: "spending_trend"
+                      message: "Your expenses increased by 18.2% compared to last month."
+                      severity: "warning"
+                    - type: "top_category"
+                      message: "Most of your spending this month was on food ($450)."
+                      severity: "info"
+                    - type: "top_subcategory"
+                      message: "Within food, most was spent on groceries ($300)."
+                      severity: "info"
+        "401":
+          description: Unauthorized, invalid or missing JWT
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Unauthorized"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Internal server error"
